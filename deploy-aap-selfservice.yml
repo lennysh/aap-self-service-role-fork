@@ -1,10 +1,6 @@
 ---
-- name: Install self-service automation portal
+- name: Install Red Hat Self-Service Automation Portal
   hosts: localhost
   gather_facts: false
-
-  vars_files:
-    - secrets.yml
-
   roles:
-    - role: self-service 
+    - role: self-service

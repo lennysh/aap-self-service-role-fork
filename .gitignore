@@ -1,5 +1,4 @@
 **/self-service/files/plugins/*
-**/secrets.yml
 **/venv
 **/.venv
 ansible.cfg
@@ -7,3 +6,6 @@ ansible.cfg
 .lock
 .venv
 **/.vscode
+**/*.tar.gz
+var_files/*.yml
+var_files/*.yaml
