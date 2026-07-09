@@ -1,171 +1,171 @@
 
-## 🧾 AAP Self Service Role
+## AAP Self Service Role
 
-This document provides step-by-step instructions to install and configure the Red Hat AAP Self Service Portal using an Ansible role and a Helm chart on OpenShift.
+Install and configure the Red Hat AAP Self Service Portal on OpenShift using an Ansible role and Helm chart.
 
-Tested with Ansible Automation Platform 2.6 and Self-Service automation Portal (GA with AAP 2.6)
+Tested with Ansible Automation Platform 2.6 and the Self-Service Automation Portal (GA with AAP 2.6).
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
-aap-ss/
+aap-self-service-role-fork/
 ├── deploy-aap-selfservice.yml
-├── requirements.yml
-├── secrets.yml               # <== You create this file manually
-├── role/
-│   └── self-service/
-│       ├── defaults/
-│       ├── files/
-│       │   └── plugins/
-│       │       ├── self-service-automation-portal-plugins-x.x.x.tar.gz # <== You need to add these manually
-
-│       │       └── ...
-│       ├── tasks/
-│       │   ├── main.yml
-│       │   ├── oauth.yml
-│       │   ├── create_token.yml
-│       │   ├── namespace.yml
-│       │   ├── secrets.yml
-│       │   ├── plugins.yml
-│       │   └── plugin_deploy.yml
-│       └── templates/
+├── collections/requirements.yml
+├── python-requirements.txt
+├── var_files/                          # Per-environment vars (gitignored)
+│   ├── aap26-portal.yml
+│   └── aap27-portal.yml
+├── plugins/                            # Plugin bundles by AAP version
+│   └── aap26/
+│       └── self-service-automation-portal-plugins-x.y.z.tar.gz
+└── self-service/                       # Ansible role
+    ├── defaults/
+    ├── files/helm/values.yml
+    └── tasks/
 ```
 
 ---
 
-## 🔐 Step 1: Create `secrets.yml` and Update `defaults/main.yml`
+## Step 1: Install Dependencies
 
-This file holds the required variables. It is **not** committed to version control (add it to `.gitignore`).
-
-```yaml
-# secrets.yml
-
-controller_username: admin
-controller_password: your_aap_admin_password
-github_token: github-scm 
-gitlab_token: gitlab-scm 
-
-# AAP OAuth/user token will be created automatically
-
-# defaults/main.yml
-openshift_namespace: self-service #change if you want a different ns/project
-controller_host: "" # AAP Route Endpoint
-```
-
----
-
-## 📦 Step 2: Add Dynamic Plugins
-
-Place your `.tar.gz` plugin packages in:
-
-```
-role/self-service/files/plugins/
-```
-
-Example:
-
-```
-role/self-service/files/plugins/
-├── self-service-automation-portal-plugins-x.x.x.tar.gz
-├── ansible-rhdh-plugins-x.x.x.tar.gz
-└── ...
-```
-
-These will be used as the source for the plugin registry build.
-
----
-
-## 🚀 Step 3: Run the Ansible Role
-
-You can run all steps using:
+Install Ansible collections:
 
 ```bash
-ansible-playbook deploy-aap-selfservice.yml
+ansible-galaxy collection install -r collections/requirements.yml
+```
 
-MAC venv: ansible-playbook deploy-aap-selfservice.yml -e "ansible_python_interpreter=$(which python)"
+Install Python dependencies:
 
+```bash
+pip install -r python-requirements.txt
+```
+
+Log in to OpenShift before running the playbook:
+
+```bash
+oc login <OpenShift_API_URL>
 ```
 
 ---
 
-## 🔧 Step 4: What the Role Does
+## Step 2: Create a Vars File
 
- Summary: What Happens in This Ansible Role
-🔐 Create OAuth2 Application in AAP
+Create one vars file per target environment under `var_files/`. These files are **not** committed to version control.
 
-File: oauth.yml
+Example `var_files/aap26-portal.yml`:
 
-Tag: create_oauth
+```yaml
+---
+controller_host: aap.example.com          # AAP route hostname (no https://)
+controller_username: admin
+controller_password: your_aap_admin_password
+openshift_namespace: aap26-self-service
+plugin_root_dir: "{{ playbook_dir }}/plugins/aap26/extracted"
 
-Description: Registers a new OAuth2 application in Ansible Automation Platform (AAP), to support authentication for a plugin or external service.
+# Optional: GitHub/GitLab PATs for SCM integration
+# github_token: ghp_your_github_token
+# gitlab_token: glpat-your_gitlab_token
+```
 
-🔑 Create AAP Token
+Required variables:
 
-File: create_token.yml
+| Variable | Description |
+|----------|-------------|
+| `controller_host` | AAP controller route hostname |
+| `controller_password` | AAP admin password |
+| `openshift_namespace` | OpenShift project for the portal |
+| `plugin_root_dir` | Directory containing extracted plugin files |
 
-Tag: create_token
+Optional variables are defined in `self-service/defaults/main.yml` (Helm chart version, OAuth app name, SSL settings, etc.).
 
-Description: Generates a token (possibly personal or client credential-based) for the OAuth2 app in AAP to allow access to its APIs.
-
-🛠️ Create OpenShift Namespace
-
-File: namespace.yml
-
-Tag: create_namespace
-
-Description: Provisions the target namespace/project in OpenShift where the app will be deployed (e.g., self-service or self-service-dev).
-
-🔐 Create OpenShift Secrets
-
-File: oc_secrets.yml
-
-Tags: create_secrets, create_rhaap_secret, create_scm_secret
-
-Description: Creates Kubernetes secrets in the namespace, including:
-
-secrets-rhaap: holding AAP token/config
-
-secrets-scm: holding GitHub/GitLab tokens for source control integration
-
-📦 Build Plugin Registry
-
-File: plugins.yml
-
-Tag: build_plugin
-
-Description: Builds custom Backstage plugins and pushes them to an OpenShift ImageStream (via BuildConfig).
-
-🚀 Deploy Plugin Registry App
-
-File: plugin_deploy.yml
-
-Tag: deploy_plugin
-
-Description: Deploys the plugin registry to OpenShift using a Deployment + Service + Route.
-
-🧮 Deploy AAP Self Service Helm Chart 
-
-File: helm_values.yml
-
-Tags: helm, helm_plugins, generate_helm_values
-
-Description: Deploys AAP Self Service helm
-
-🔁 Update AAP OAuth2 Application with RHAAP Route
-
-File: update_aap_oauth.yml
-
-Tag: update_oauth
-
-Description: Once RHAAP is deployed, retrieves its Route and updates the AAP OAuth2 app with the correct redirect URI (e.g., /oauth2/callback/).
+The AAP OAuth application and API token are created automatically by the role.
 
 ---
 
-## 📦 Helm Chart
+## Step 3: Add Dynamic Plugins
 
-The Helm chart deployed is:
+Download the **Ansible self-service automation portal Setup Bundle** from the [Red Hat AAP Product Software downloads](https://access.redhat.com/downloads/content/480) page.
+
+Place the bundle under a version-specific directory, for example:
+
+```
+plugins/aap26/self-service-automation-portal-plugins-2.1.4.tar.gz
+```
+
+Extract the bundle before running the playbook. `plugin_root_dir` must point at the **extracted** files, not the outer `.tar.gz`:
+
+```bash
+mkdir -p plugins/aap26/extracted
+tar --exclude='*code*' -xzf \
+  plugins/aap26/self-service-automation-portal-plugins-2.1.4.tar.gz \
+  -C plugins/aap26/extracted
+```
+
+After extraction you should see `.tgz` and `.integrity` files such as:
+
+```
+ansible-plugin-backstage-rhaap-dynamic-x.y.z.tgz
+ansible-plugin-backstage-rhaap-dynamic-x.y.z.tgz.integrity
+ansible-plugin-scaffolder-backend-module-backstage-rhaap-dynamic-x.y.z.tgz
+ansible-plugin-scaffolder-backend-module-backstage-rhaap-dynamic-x.y.z.tgz.integrity
+```
+
+Set `plugin_root_dir` in your vars file to that extracted directory.
+
+---
+
+## Step 4: Run the Ansible Role
+
+A vars file **must** be passed on the command line:
+
+```bash
+ansible-playbook deploy-aap-selfservice.yml -e @var_files/aap26-portal.yml
+```
+
+macOS with a virtualenv:
+
+```bash
+ansible-playbook deploy-aap-selfservice.yml \
+  -e @var_files/aap26-portal.yml \
+  -e "ansible_python_interpreter=$(which python)"
+```
+
+Re-run specific steps with tags:
+
+```bash
+ansible-playbook deploy-aap-selfservice.yml \
+  -e @var_files/aap26-portal.yml \
+  --tags build_plugin,deploy_plugin
+```
+
+Override individual variables inline:
+
+```bash
+ansible-playbook deploy-aap-selfservice.yml \
+  -e @var_files/aap26-portal.yml \
+  -e openshift_namespace=my-other-namespace
+```
+
+---
+
+## What the Role Does
+
+| Step | File | Tag(s) | Description |
+|------|------|--------|-------------|
+| Create OAuth2 app | `oauth.yml` | `create_oauth` | Registers an OAuth2 application in AAP |
+| Create AAP token | `create_token.yml` | `create_token` | Generates an API token for the OAuth app |
+| Create namespace | `namespace.yml` | `create_namespace` | Creates the OpenShift project |
+| Create secrets | `oc_secrets.yml` | `create_secrets`, `create_rhaap_secret`, `create_scm_secret` | Creates `secrets-rhaap-portal` and optional `secrets-scm` |
+| Build plugin registry | `plugins.yml` | `build_plugin` | Builds plugins into an OpenShift ImageStream |
+| Deploy plugin registry | `plugin_deploy.yml` | `deploy_plugin` | Deploys the plugin registry Deployment and Service |
+| Deploy Helm chart | `helm_values.yml` | `helm`, `helm_plugins`, `generate_helm_values` | Installs the `redhat-rhaap-portal` chart |
+| Update OAuth redirect | `update_aap_oauth.yml` | `update_oauth` | Sets the OAuth redirect URI from the portal Route |
+
+---
+
+## Helm Chart
 
 ```yaml
 chart: https://charts.openshift.io
@@ -174,37 +174,13 @@ name: redhat-rhaap-portal
 
 ---
 
-## ✅ Prerequisites
+## Prerequisites
 
-* You must have access to a running OpenShift cluster
-* You must have `oc` and `kubectl` access with cluster-admin permissions
-* Your local machine must have:
-
-  * `ansible`
-  * `redhat.openshift` and `ansible.platform` collections installed
-  * `oc` OpenShift CLI
-  * `helm` HELM CLI
+* Access to a running OpenShift cluster
+* `oc` and `kubectl` access with permissions to create projects, secrets, builds, and Helm releases
+* Local tools: `ansible`, `oc`, `helm`
+* Ansible collections: `redhat.openshift`, `kubernetes.core`, `ansible.platform`
 
 ```bash
-ansible-galaxy collection install redhat.openshift
-ansible-galaxy collection install ansible.platform
+ansible-galaxy collection install -r collections/requirements.yml
 ```
-
----
-
-## ✅ Optional: requirements.yml
-
-To manage collections in a consistent way, create `requirements.yml`:
-
-```yaml
-collections:
-  - name: redhat.openshift
-  - name: ansible.platform
-```
-
-Then run:
-
-```bash
-ansible-galaxy install -r requirements.yml
-```
-
