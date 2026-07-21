@@ -28,6 +28,7 @@ TAGS=preflight ./install-portal.sh
 
 ```
 aap-self-service-role-fork/
+├── install-portal.sh                   # Wrapper for non-expert installs
 ├── deploy-aap-selfservice.yml
 ├── collections/requirements.yml
 ├── python-requirements.txt
@@ -95,8 +96,11 @@ plugin_root_dir: "{{ playbook_dir }}/plugins/aap26/extracted"
 # rhsm_offline_token: your_rhsm_offline_token
 # aap_version: "2.6"
 
-# Optional: recreate OAuth app on each run
+# Optional: recreate OAuth app (needed when secrets drift / invalid_client)
 # recreate_oauth_app: false
+
+# Lab / self-signed AAP certificates (default false)
+# aap_verify_ssl: false
 ```
 
 Required variables:
@@ -331,13 +335,9 @@ ansible-playbook deploy-aap-selfservice.yml -e @var_files/aap26-portal.yml --tag
 
 Preflight also runs automatically when using `--tags build_plugin`, `helm`, or `deploy_plugin`.
 
-```bash
-ansible-galaxy collection install -r collections/requirements.yml
-```
-
 ### If plugin builds fail: internal registry disabled
 
-On your cluster, the integrated registry is currently **Removed**. A cluster admin must re-enable it and configure storage before plugin builds can push to `ImageStreamTag plugin-registry:latest`.
+The plugin-registry build pushes to the OpenShift integrated registry (`ImageStreamTag plugin-registry:latest`). If `configs.imageregistry/cluster` has `spec.managementState: Removed` or storage is not configured, builds fail or hang.
 
 Typical admin steps:
 
@@ -378,3 +378,35 @@ ansible-playbook deploy-aap-selfservice.yml \
   -e @var_files/aap26-portal.yml \
   --tags build_plugin,deploy_plugin
 ```
+
+---
+
+## Troubleshooting
+
+### Portal Sign In fails with Missing session cookie / Failed to post data
+
+Backend logs typically show:
+
+```text
+Failed to send POST request: Unauthorized
+Error: {"error":"invalid_client"}
+```
+
+The OpenShift secret `secrets-rhaap-portal` no longer matches the AAP OAuth application (common after redirect-URI updates or manual OAuth changes). Recreate the OAuth app and refresh secrets:
+
+```bash
+ansible-playbook deploy-aap-selfservice.yml -e @var_files/aap26-portal.yml \
+  -e recreate_oauth_app=true \
+  --tags aap_setup,create_oauth,create_token,create_secrets,update_oauth
+oc rollout restart deployment/self-service-rhaap-portal -n <openshift_namespace>
+```
+
+Then clear browser cookies for the portal and AAP hosts and sign in again.
+
+### Self-signed AAP certificates
+
+Keep `aap_verify_ssl: false` (the default) for lab clusters with self-signed AAP routes. The role passes this as a real YAML boolean into Helm (`checkSSL`). Do not set it via `--set-string`, or Node may treat `"False"` as truthy and break the OAuth token exchange.
+
+### Helm wait times out / pods Pending or Evicted
+
+Often node `DiskPressure` (ephemeral storage on `/var`), not a role bug. Preflight warns when nodes report disk pressure. Free space on workers or grow the node disk that backs `/var`, then re-run with `--tags helm`. Default `helm_deploy_wait_timeout` is `1200` seconds (first deploy pulls a ~3.4 GB image and installs plugins).
