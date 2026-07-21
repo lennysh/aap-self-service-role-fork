@@ -12,6 +12,6 @@
   register: aap_token_result
 
 - name: Show AAP token value
-  debug:
+  ansible.builtin.debug:
     msg: "AAP token: {{ aap_token_result.ansible_facts.aap_token.token }}"
   when: show_token | default(false)

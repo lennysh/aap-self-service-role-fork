@@ -8,22 +8,22 @@
   register: ingress_info
 
 - name: Set base domain fact
-  set_fact:
+  ansible.builtin.set_fact:
     openshift_base_domain: "{{ ingress_info.result.status.domain }}"
 
 - name: Fail if base domain is not defined
-  fail:
+  ansible.builtin.fail:
     msg: "openshift_base_domain is not set. Check the IngressController or cluster access."
   when: ingress_info.result.status.domain is not defined
 
 - name: Set base domain fact
-  set_fact:
+  ansible.builtin.set_fact:
     openshift_base_domain: "{{ ingress_info.result.status.domain }}"
 
 - name: Add Openshift repository
   kubernetes.core.helm_repository:
-    name: openshift 
-    repo_url: "{{ helm_repo_url }}" 
+    name: openshift
+    repo_url: "{{ helm_repo_url }}"
 
 - name: Build helm values file list
   ansible.builtin.set_fact:
@@ -50,12 +50,12 @@
     set_values:
       - value: redhat-developer-hub.global.clusterRouterBase={{ openshift_base_domain }}
         value_type: string
-      # Must be a real YAML boolean. value_type:string turns False into "False",
-      # which Node treats as truthy and keeps TLS verification enabled.
+      # JSON booleans keep checkSSL typed correctly. value_type:string turns
+      # false into "False", which Node treats as truthy and breaks OAuth token exchange.
       - value: redhat-developer-hub.upstream.backstage.appConfig.auth.providers.rhaap.production.checkSSL={{ aap_verify_ssl | bool | lower }}
-        value_type: auto
+        value_type: json
       - value: redhat-developer-hub.upstream.backstage.appConfig.ansible.rhaap.checkSSL={{ aap_verify_ssl | bool | lower }}
-        value_type: auto
+        value_type: json
   tags: helm
 
 - name: Wait for portal Helm deployment to be ready
@@ -98,4 +98,3 @@
           Helm may have upgraded successfully; re-run with --tags helm once issues are resolved,
           or increase helm_deploy_wait_timeout in your vars file.
   tags: helm
-

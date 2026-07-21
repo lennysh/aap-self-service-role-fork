@@ -8,7 +8,7 @@
   tags: [deploy_plugin]
 
 - name: Extract plugin registry image digest
-  set_fact:
+  ansible.builtin.set_fact:
     plugin_registry_image_digest: "{{ imagestream_info.result.status.tags[0]['items'][0]['dockerImageReference'] }}"
   when:
     - imagestream_info.result.status.tags is defined
@@ -17,7 +17,7 @@
   tags: [deploy_plugin]
 
 - name: Fail if plugin_registry_image_digest is not defined
-  fail:
+  ansible.builtin.fail:
     msg: "plugin_registry_image_digest could not be extracted from ImageStream."
   when: plugin_registry_image_digest is not defined
   tags: [deploy_plugin]
@@ -83,4 +83,3 @@
         sessionAffinity: None
         internalTrafficPolicy: Cluster
   tags: [deploy_plugin]
-

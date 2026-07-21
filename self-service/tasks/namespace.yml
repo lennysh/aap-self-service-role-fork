@@ -5,7 +5,6 @@
     state: present
     resource_definition:
       apiVersion: project.openshift.io/v1
-      kind: Project 
+      kind: Project
       metadata:
         name: "{{ openshift_namespace }}"
-

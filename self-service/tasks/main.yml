@@ -17,15 +17,15 @@
   tags: [aap_setup, create_oauth]
 
 - name: Create OAuth2 application in AAP
-  import_tasks: oauth.yml
+  ansible.builtin.import_tasks: oauth.yml
   tags: [create_oauth]
 
 - name: Create AAP token
-  import_tasks: create_token.yml
+  ansible.builtin.import_tasks: create_token.yml
   tags: [create_token]
 
 - name: Create OpenShift namespace
-  import_tasks: namespace.yml
+  ansible.builtin.import_tasks: namespace.yml
   tags: [create_namespace]
 
 - name: Download plugins from RHSM
@@ -34,27 +34,27 @@
   tags: [download_plugins, build_plugin]
 
 - name: Create OpenShift secrets
-  import_tasks: oc_secrets.yml
+  ansible.builtin.import_tasks: oc_secrets.yml
   tags:
     - create_secrets
     - create_rhaap_secret
     - create_scm_secret
 
 - name: Build plugin registry
-  import_tasks: plugins.yml
+  ansible.builtin.import_tasks: plugins.yml
   tags: [build_plugin]
 
 - name: Deploy plugin registry app
-  import_tasks: plugin_deploy.yml
+  ansible.builtin.import_tasks: plugin_deploy.yml
   tags: [deploy_plugin]
 
 - name: Generate Helm values with plugin integrity
-  import_tasks: helm_values.yml
+  ansible.builtin.import_tasks: helm_values.yml
   tags:
     - helm
     - helm_plugins
     - generate_helm_values
 
 - name: Update AAP OAuth2 application with RHAAP route
-  import_tasks: update_aap_oauth.yml
+  ansible.builtin.import_tasks: update_aap_oauth.yml
   tags: [update_oauth]

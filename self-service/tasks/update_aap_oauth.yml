@@ -13,25 +13,25 @@
   tags: [get_route]
 
 - name: Debug helm_release_name and namespace
-  debug:
+  ansible.builtin.debug:
     msg: "helm_release_name={{ helm_release_name }}, openshift_namespace={{ openshift_namespace }}"
 
 - name: Debug route host
-  debug:
+  ansible.builtin.debug:
     msg: "Route host is {{ rhaap_route.resources[0].spec.host }}"
 
 - name: Set RHAAP route hostname fact
-  set_fact:
+  ansible.builtin.set_fact:
     rhaap_route_host: "{{ rhaap_route.resources[0].spec.host }}"
 
 - name: Set OAuth redirect URI and app URL
-  set_fact:
+  ansible.builtin.set_fact:
     rhaap_redirect_url: "https://{{ rhaap_route_host }}/api/auth/rhaap/handler/frame"
     rhaap_app_url: "https://{{ rhaap_route_host }}"
 
 - name: Update OAuth2 application in AAP with RHAAP route
   ansible.platform.application:
-    name: "{{ aap_oauth_client_name }}" 
+    name: "{{ aap_oauth_client_name }}"
     description: "Self Service application"
     organization: "{{ aap_organization }}"
     state: present
@@ -45,4 +45,3 @@
     aap_password: "{{ aap_password }}"
     aap_validate_certs: "{{ aap_verify_ssl }}"
   tags: [update_oauth]
-

@@ -25,7 +25,7 @@
   tags: [aap_setup, create_oauth]
 
 - name: Delete existing OAuth2 application before recreate
-  when: recreate_oauth_app | default(false)
+  when: recreate_oauth_app | default(false) | bool
   ansible.platform.application:
     name: "{{ aap_oauth_client_name }}"
     organization: "{{ aap_organization }}"
