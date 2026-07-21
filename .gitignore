@@ -7,5 +7,7 @@ ansible.cfg
 .venv
 **/.vscode
 **/*.tar.gz
+plugins/**/extracted/
 var_files/*.yml
 var_files/*.yaml
+.ansible/

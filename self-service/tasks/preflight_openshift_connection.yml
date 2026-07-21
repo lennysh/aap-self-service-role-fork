@@ -1,0 +1,38 @@
+---
+- name: Verify OpenShift API connectivity
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: default
+  register: preflight_k8s_api
+  failed_when: false
+  tags: [preflight]
+
+- name: Fail when OpenShift API is unreachable
+  ansible.builtin.fail:
+    msg: |
+      Could not reach the OpenShift/Kubernetes API.
+
+      Ensure you are logged in and using the correct context:
+        oc whoami --show-server
+        kubectl config current-context
+
+      If the API was briefly unavailable, wait for the control plane to stabilize and retry:
+        curl -sk -o /dev/null -w '%{http_code}\n' https://<api-server>/readyz
+
+      Error: {{ preflight_k8s_api.msg | default('unknown error') }}
+  when: preflight_k8s_api.failed | default(false) or preflight_k8s_api.resources is not defined
+  tags: [preflight]
+
+- name: Show active OpenShift cluster context
+  ansible.builtin.command: oc whoami --show-server
+  register: preflight_oc_server
+  changed_when: false
+  failed_when: false
+  tags: [preflight]
+
+- name: Display OpenShift API server
+  ansible.builtin.debug:
+    msg: "Using OpenShift API: {{ preflight_oc_server.stdout | default('unknown') }}"
+  when: preflight_oc_server.rc == 0
+  tags: [preflight]

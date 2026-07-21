@@ -1,0 +1,177 @@
+---
+- name: Get OpenShift image registry configuration
+  kubernetes.core.k8s_info:
+    api_version: imageregistry.operator.openshift.io/v1
+    kind: Config
+    name: cluster
+  register: image_registry_config
+  tags: [preflight, build_plugin]
+
+- name: Set image registry facts
+  ansible.builtin.set_fact:
+    image_registry_spec: "{{ image_registry_config.resources[0].spec | default({}) }}"
+    image_registry_status: "{{ image_registry_config.resources[0].status | default({}) }}"
+    image_registry_available: >-
+      {{
+        (
+          image_registry_config.resources[0].status.conditions | default([])
+          | selectattr('type', 'equalto', 'Available')
+          | map(attribute='status')
+          | first
+          | default('False')
+        ) == 'True'
+      }}
+    image_registry_storage_configured: >-
+      {{
+        (
+          image_registry_config.resources[0].spec.storage | default({}) | length > 0
+        )
+        or (
+          image_registry_config.resources[0].status.storageManaged | default(false)
+        )
+      }}
+  when: image_registry_config.resources | length > 0
+  tags: [preflight, build_plugin]
+
+- name: Fail when OpenShift image registry CR is missing
+  ansible.builtin.fail:
+    msg: Could not read configs.imageregistry/cluster. Ensure you are logged in with sufficient cluster permissions.
+  when: image_registry_config.resources | length == 0
+  tags: [preflight, build_plugin]
+
+- name: Fail when OpenShift internal registry is disabled
+  ansible.builtin.fail:
+    msg: |
+      The OpenShift internal container registry is disabled (spec.managementState=Removed).
+
+      Cluster admin: re-enable it and configure storage (see README registry section).
+  when: image_registry_spec.managementState | default('') == 'Removed'
+  tags: [preflight, build_plugin]
+
+- name: Fail when OpenShift internal registry storage is not configured
+  ansible.builtin.fail:
+    msg: |
+      The OpenShift internal registry is Managed but has no storage backend configured.
+
+      Current status includes: storage backend not configured / StorageNotConfigured
+      (spec.storage is empty and status.storageManaged=false).
+
+      The plugin-registry build outputs to ImageStreamTag plugin-registry:latest and requires a working integrated registry.
+
+      Cluster admin: create a PVC first, then reference it by name (claim must be a string, not an object).
+        oc patch configs.imageregistry/cluster --type merge -p '{"spec":{"managementState":"Managed","rolloutStrategy":"Recreate","storage":{"pvc":{"claim":"image-registry-storage"}}}}'
+
+      Note: ReadWriteOnce PVC requires rolloutStrategy Recreate (not RollingUpdate).
+
+      For non-production testing only, emptyDir may be used instead:
+        oc patch configs.imageregistry/cluster --type merge -p '{"spec":{"storage":{"emptyDir":{}}}}}'
+
+      Verify the registry becomes Available:
+        oc get configs.imageregistry/cluster -o jsonpath='Available={.status.conditions[?(@.type=="Available")].status}{" "}{.status.conditions[?(@.type=="Available")].message}{"\n"}'
+        oc get pods -n openshift-image-registry
+
+      Then cancel stale builds and re-run this role:
+        oc cancel-build -n {{ openshift_namespace }} -l openshift.io/build-config.name=plugin-registry
+        ansible-playbook deploy-aap-selfservice.yml -e @var_files/<env>-portal.yml --tags build_plugin,deploy_plugin
+  when:
+    - image_registry_spec.managementState | default('') == 'Managed'
+    - not image_registry_storage_configured | bool
+  tags: [preflight, build_plugin]
+
+- name: Fail when registry uses RWO PVC with RollingUpdate rollout strategy
+  ansible.builtin.fail:
+    msg: |
+      The OpenShift internal registry uses a PVC but rolloutStrategy is RollingUpdate.
+
+      ReadWriteOnce PVC storage requires rolloutStrategy Recreate. Patch the registry (claim must be a string name, not an object):
+        oc patch configs.imageregistry/cluster --type merge -p '{"spec":{"rolloutStrategy":"Recreate","storage":{"pvc":{"claim":"image-registry-storage"}}}}'
+
+      Verify Available=True before re-running:
+        oc get configs.imageregistry/cluster -o jsonpath='Available={.status.conditions[?(@.type=="Available")].status}{" "}{.status.conditions[?(@.type=="Available")].message}{"\n"}'
+  when:
+    - image_registry_spec.managementState | default('') == 'Managed'
+    - image_registry_spec.storage.pvc is defined
+    - image_registry_spec.storage.pvc.claim | default('') != ''
+    - image_registry_spec.rolloutStrategy | default('RollingUpdate') == 'RollingUpdate'
+  tags: [preflight, build_plugin]
+
+- name: Fail when OpenShift internal registry is not Available
+  ansible.builtin.fail:
+    msg: |
+      The OpenShift internal registry is not Available yet.
+
+      managementState={{ image_registry_spec.managementState | default('unknown') }}
+      Check: oc get configs.imageregistry/cluster -o yaml
+      Check: oc get pods -n openshift-image-registry
+
+      Wait for Available=True before re-running plugin builds.
+  when:
+    - image_registry_spec.managementState | default('') == 'Managed'
+    - image_registry_storage_configured | bool
+    - not image_registry_available | bool
+  tags: [preflight, build_plugin]
+
+- name: Verify httpd builder image is available in openshift namespace
+  kubernetes.core.k8s_info:
+    api_version: image.openshift.io/v1
+    kind: ImageStreamTag
+    name: httpd:2.4-ubi8
+    namespace: openshift
+  register: httpd_builder_istag
+  tags: [preflight, build_plugin]
+
+- name: Fail when httpd builder image is missing
+  ansible.builtin.fail:
+    msg: |
+      ImageStreamTag openshift/httpd:2.4-ubi8 was not found.
+
+      The plugin-registry build uses this image as its builder. Ensure the httpd ImageStream exists in the openshift namespace.
+  when: httpd_builder_istag.resources | length == 0
+  tags: [preflight, build_plugin]
+
+- name: Check target OpenShift namespace exists
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: "{{ openshift_namespace }}"
+  register: preflight_target_namespace
+  tags: [preflight, build_plugin]
+
+- name: Get existing plugin-registry builds
+  kubernetes.core.k8s_info:
+    api_version: build.openshift.io/v1
+    kind: Build
+    namespace: "{{ openshift_namespace }}"
+    label_selectors:
+      - openshift.io/build-config.name=plugin-registry
+  register: plugin_registry_builds
+  when: preflight_target_namespace.resources | length > 0
+  tags: [preflight, build_plugin]
+
+- name: Identify blocking plugin-registry builds
+  ansible.builtin.set_fact:
+    blocking_plugin_builds: >-
+      {{
+        plugin_registry_builds.resources
+        | default([])
+        | selectattr('status.phase', 'in', ['New', 'Pending', 'Running'])
+        | map(attribute='metadata.name')
+        | list
+      }}
+  when: preflight_target_namespace.resources | length > 0
+  tags: [preflight, build_plugin]
+
+- name: Fail when stale plugin-registry builds are blocking the queue
+  ansible.builtin.fail:
+    msg: |
+      Plugin-registry builds are stuck in a non-terminal phase: {{ blocking_plugin_builds | join(', ') }}.
+
+      The BuildConfig uses runPolicy Serial, so new builds wait behind these.
+
+      Cancel stale builds, fix the underlying issue (often the internal registry), then re-run:
+        oc cancel-build {{ blocking_plugin_builds | join(' ') }} -n {{ openshift_namespace }}
+        ansible-playbook deploy-aap-selfservice.yml -e @var_files/<env>-portal.yml --tags build_plugin,deploy_plugin
+  when:
+    - preflight_target_namespace.resources | length > 0
+    - blocking_plugin_builds | default([]) | length > 0
+  tags: [preflight, build_plugin]

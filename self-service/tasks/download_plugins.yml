@@ -1,0 +1,51 @@
+---
+- name: Get Red Hat API token from RHSM
+  ansible.builtin.uri:
+    url: https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
+    method: POST
+    body_format: form-urlencoded
+    body:
+      grant_type: refresh_token
+      client_id: rhsm-api
+      refresh_token: "{{ rhsm_offline_token }}"
+  register: r_rhsm_token
+  tags: [download_plugins, build_plugin]
+
+- name: Collect available installers from RHSM
+  ansible.builtin.uri:
+    url: "https://api.access.redhat.com/management/v1/images/cset/{{ aap_release_url }}"
+    method: GET
+    return_content: true
+    headers:
+      Authorization: "Bearer {{ r_rhsm_token.json.access_token }}"
+  register: r_aap_installers
+  tags: [download_plugins, build_plugin]
+
+- name: Extract download path for plugins
+  ansible.builtin.set_fact:
+    _aap_portal_plugins: "{{ r_aap_installers.json.body | selectattr('filename', 'match', 'self-service') | first }}"
+  tags: [download_plugins, build_plugin]
+
+- name: Download plugins archive
+  ansible.builtin.get_url:
+    url: "{{ _aap_portal_plugins.downloadHref }}"
+    dest: "{{ plugins_archive_dest }}/{{ _aap_portal_plugins.filename }}"
+    mode: "0644"
+    headers:
+      Authorization: "Bearer {{ r_rhsm_token.json.access_token }}"
+  tags: [download_plugins, build_plugin]
+
+- name: Create plugin extraction destination directory
+  ansible.builtin.file:
+    path: "{{ plugin_root_dir }}"
+    state: directory
+    mode: "0755"
+  tags: [download_plugins, build_plugin]
+
+- name: Extract plugins archive
+  ansible.builtin.unarchive:
+    src: "{{ plugins_archive_dest }}/{{ _aap_portal_plugins.filename }}"
+    dest: "{{ plugin_root_dir }}"
+    exclude:
+      - "*code*"
+  tags: [download_plugins, build_plugin]

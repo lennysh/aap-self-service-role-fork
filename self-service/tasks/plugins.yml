@@ -7,6 +7,7 @@
       metadata:
         name: plugin-registry
         namespace: "{{ openshift_namespace }}"
+  tags: [build_plugin]
 
 - name: Create BuildConfig for plugin-registry (binary build)
   redhat.openshift.k8s:
@@ -19,6 +20,7 @@
         namespace: "{{ openshift_namespace }}"
         labels:
           app: plugin-registry
+          build: plugin-registry
       spec:
         output:
           to:
@@ -26,6 +28,7 @@
             name: plugin-registry:latest
         source:
           type: Binary
+          binary: {}
         strategy:
           type: Source
           sourceStrategy:
@@ -35,13 +38,95 @@
               namespace: openshift
         triggers:
           - type: ConfigChange
-  tags: [deploy_plugin]
+  tags: [build_plugin]
 
 - name: Start plugin-registry build from local dir
-  command: >
-    oc start-build plugin-registry
-    --from-dir={{ plugin_root_dir }}
-    --wait
-    -n {{ openshift_namespace }} 
+  ansible.builtin.command:
+    cmd: >
+      oc start-build plugin-registry
+      --from-dir={{ plugin_root_dir }}
+      --wait=false
+      -n {{ openshift_namespace }}
   delegate_to: localhost
   run_once: true
+  register: build_started
+  changed_when: true
+  tags: [build_plugin]
+
+- name: Extract build name from start-build output
+  ansible.builtin.set_fact:
+    plugin_build_name: "{{ build_started.stdout | regex_search('build \"([^\"]+)\"', '\\1') | first }}"
+  when: build_started.stdout is search('build \"')
+  tags: [build_plugin]
+
+- name: Get latest plugin-registry build name
+  ansible.builtin.command:
+    cmd: >
+      oc get builds -n {{ openshift_namespace }}
+      -l openshift.io/build-config.name=plugin-registry
+      --sort-by=.metadata.creationTimestamp
+      -o jsonpath='{.items[-1].metadata.name}'
+  delegate_to: localhost
+  run_once: true
+  register: latest_plugin_build
+  changed_when: false
+  retries: 10
+  delay: 3
+  until: latest_plugin_build.rc == 0 and latest_plugin_build.stdout != ""
+  when: plugin_build_name is not defined or plugin_build_name == ''
+  tags: [build_plugin]
+
+- name: Set plugin build name
+  ansible.builtin.set_fact:
+    plugin_build_name: "{{ latest_plugin_build.stdout }}"
+  when:
+    - plugin_build_name is not defined or plugin_build_name == ''
+    - latest_plugin_build.stdout is defined
+    - latest_plugin_build.stdout != ''
+  tags: [build_plugin]
+
+- name: Fail if plugin-registry build was not created
+  ansible.builtin.fail:
+    msg: >-
+      Failed to start plugin-registry build in {{ openshift_namespace }}.
+      Check builds with: oc get builds -n {{ openshift_namespace }} -l openshift.io/build-config.name=plugin-registry
+  when: plugin_build_name is not defined or plugin_build_name == ''
+  tags: [build_plugin]
+
+- name: Wait for plugin-registry build to complete
+  ansible.builtin.command:
+    cmd: >
+      oc wait --for=condition=complete
+      build/{{ plugin_build_name }}
+      --timeout={{ plugin_build_timeout }}
+      -n {{ openshift_namespace }}
+  delegate_to: localhost
+  run_once: true
+  register: build_wait
+  failed_when: false
+  tags: [build_plugin]
+
+- name: Get plugin-registry build phase
+  ansible.builtin.command:
+    cmd: >
+      oc get build {{ plugin_build_name }}
+      -n {{ openshift_namespace }}
+      -o jsonpath='{.status.phase}'
+  delegate_to: localhost
+  run_once: true
+  register: build_phase
+  changed_when: false
+  when: build_wait.rc != 0
+  tags: [build_plugin]
+
+- name: Fail if plugin-registry build did not complete
+  ansible.builtin.fail:
+    msg: >-
+      Build {{ plugin_build_name }} in {{ openshift_namespace }} did not complete
+      (phase: {{ build_phase.stdout | default('unknown') }}).
+      Inspect: oc describe build {{ plugin_build_name }} -n {{ openshift_namespace }}
+      Logs: oc logs build/{{ plugin_build_name }} -n {{ openshift_namespace }}
+  when:
+    - build_wait.rc != 0
+    - build_phase.stdout | default('') != 'Complete'
+  tags: [build_plugin]

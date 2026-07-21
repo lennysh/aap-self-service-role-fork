@@ -2,16 +2,70 @@
 ---
 # defaults file for self-service
 plugin_root_dir: "{{ role_path }}/files/plugins"
+plugins_archive_dest: "{{ playbook_dir }}/plugins"
+plugin_build_timeout: "20m"
 helm_values: "{{ role_path }}/files/helm/values.yml"
 openshift_namespace: ssap
-helm_chart_version: "2.0.3"
+helm_chart_version: "2.1.6"
+helm_plugin_version_map:
+  "2.1.4": "2.1.6"
+  "2.2.3": "2.2.3"
+auto_helm_chart_version: true
+preflight_fail_on_disk_pressure: false
 helm_repo_url: "https://charts.openshift.io"
 helm_repo_name: "openshift"
 helm_chart_name: "redhat-rhaap-portal"
 helm_release_name: "self-service"
-controller_host: "" # AAP Controler Route  
-oauth_redirect_uri_suffix: "/api/auth/rhaap/handler/frame"
-controller_verify_ssl: false
+helm_deploy_wait_timeout: 1200
+helm_min_version: "3.10.0"
+aap_host: "" # AAP controller route hostname or URL
+aap_username: admin
+aap_password: ""
+aap_verify_ssl: false
 aap_oauth_client_name: "Self Service"
 aap_organization: "Default"
-aap_ssl_verify: false
+oauth_redirect_uri_suffix: "/api/auth/rhaap/handler/frame"
+
+# AAP platform setup
+ensure_aap_organization: true
+recreate_oauth_app: false
+
+# Plugin download from RHSM (optional)
+download_plugins: false
+rhsm_offline_token: ""
+aap_version: "2.6"
+rhel_version: 10
+release_arch: x86_64
+aap_release_url: "ansible-automation-platform-{{ aap_version }}-for-rhel-{{ rhel_version }}-{{ release_arch }}-files"
+
+# Optional SCM integration
+github_token: ""
+gitlab_token: ""
+
+# External PostgreSQL (optional; embedded Postgres is used when false)
+external_postgresql_enabled: false
+external_postgresql_secret_name: portal-postgresql-external
+external_postgresql_host: ""
+external_postgresql_port: 5432
+external_postgresql_user: ""
+external_postgresql_password: ""
+external_postgresql_database: rhdh_production
+external_postgresql_ssl_enabled: false
+external_postgresql_ssl_reject_unauthorized: false
+
+# S3-compatible object storage (optional; used for TechDocs publisher)
+s3_storage_enabled: false
+s3_secret_name: portal-s3-storage
+s3_bucket_name: ""
+s3_region: ""
+s3_endpoint: "" # e.g. https://s3.amazonaws.com or ODF/noobaa endpoint
+s3_host: "" # hostname:port for BUCKET_HOST; derived from s3_endpoint when empty
+s3_access_key_id: ""
+s3_secret_access_key: ""
+s3_force_path_style: true
+s3_use_existing_secret: false # set true when using an ObjectBucketClaim secret
+s3_existing_secret_name: ""
+s3_existing_configmap_name: ""
+
+# Rendered helm overlay path (created when external DB or S3 is enabled)
+helm_storage_values_path: "{{ playbook_dir }}/.ansible/helm-values-storage.yml"

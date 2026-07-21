@@ -1,0 +1,142 @@
+---
+# Example vars file for deploy-aap-selfservice.yml
+#
+# Setup:
+#   cp var_files/portal.yml.example var_files/aap26-portal.yml
+#   # edit var_files/aap26-portal.yml with your values
+#
+# Run examples:
+#
+#   Full install (manual plugins already extracted):
+#     ansible-playbook deploy-aap-selfservice.yml -e @var_files/aap26-portal.yml
+#
+#   Full install with RHSM plugin download:
+#     ansible-playbook deploy-aap-selfservice.yml -e @var_files/aap26-portal.yml
+#     # (set download_plugins: true and rhsm_offline_token below)
+#
+#   Full install with inline overrides:
+#     ansible-playbook deploy-aap-selfservice.yml \
+#       -e @var_files/aap26-portal.yml \
+#       -e openshift_namespace=my-other-namespace
+#
+#   Re-run plugin build/deploy only:
+#     ansible-playbook deploy-aap-selfservice.yml \
+#       -e @var_files/aap26-portal.yml \
+#       --tags build_plugin,deploy_plugin
+#
+#   Run preflight checks only (oc/helm, API, AAP, plugins, registry):
+#     ansible-playbook deploy-aap-selfservice.yml \
+#       -e @var_files/aap26-portal.yml \
+#       --tags preflight
+#
+#   Re-run Helm deploy and OAuth update only:
+#     ansible-playbook deploy-aap-selfservice.yml \
+#       -e @var_files/aap26-portal.yml \
+#       --tags helm,update_oauth
+#
+#   Re-run AAP OAuth/token setup only:
+#     ansible-playbook deploy-aap-selfservice.yml \
+#       -e @var_files/aap26-portal.yml \
+#       --tags aap_setup,create_oauth,create_token,update_oauth
+#
+#   macOS virtualenv:
+#     ansible-playbook deploy-aap-selfservice.yml \
+#       -e @var_files/aap26-portal.yml \
+#       -e "ansible_python_interpreter=$(which python)"
+
+# =============================================================================
+# REQUIRED
+# =============================================================================
+
+aap_host: aap.example.com              # hostname or full URL (https:// added automatically)
+aap_username: admin
+aap_password: CHANGE_ME
+openshift_namespace: aap-self-service
+
+# Directory containing extracted plugin .tgz and .integrity files.
+# Not required when download_plugins: true (role extracts here automatically).
+plugin_root_dir: "{{ playbook_dir }}/plugins/aap26/extracted"
+
+# =============================================================================
+# SCENARIO A: Manual plugins (default)
+# =============================================================================
+# 1. Download self-service-automation-portal-plugins-x.y.z.tar.gz from Red Hat
+# 2. Extract:
+#      mkdir -p plugins/aap26/extracted
+#      tar --exclude='*code*' -xzf plugins/aap26/self-service-automation-portal-plugins-*.tar.gz \
+#        -C plugins/aap26/extracted
+# 3. Run full install:
+#      ansible-playbook deploy-aap-selfservice.yml -e @var_files/aap26-portal.yml
+
+download_plugins: false
+
+# =============================================================================
+# SCENARIO B: Automatic plugin download from RHSM
+# =============================================================================
+# Uncomment and set rhsm_offline_token. Token instructions:
+# https://access.redhat.com/articles/3626371
+#
+# download_plugins: true
+# rhsm_offline_token: CHANGE_ME
+# aap_version: "2.6"
+# rhel_version: 10
+# release_arch: x86_64
+
+# =============================================================================
+# SCENARIO C: GitHub / GitLab SCM integration (optional)
+# =============================================================================
+# github_token: ghp_CHANGE_ME
+# gitlab_token: glpat-CHANGE_ME
+
+# =============================================================================
+# SCENARIO D: OAuth app recreate on re-run (optional)
+# =============================================================================
+# recreate_oauth_app: true
+
+# =============================================================================
+# SCENARIO E: External PostgreSQL (optional)
+# =============================================================================
+# Disable embedded Postgres and point the portal at your own database.
+# See README for SSL and production notes.
+#
+# external_postgresql_enabled: true
+# external_postgresql_host: postgres.example.com
+# external_postgresql_port: 5432
+# external_postgresql_user: rhdh
+# external_postgresql_password: CHANGE_ME
+# external_postgresql_database: rhdh_production
+# external_postgresql_ssl_enabled: false
+# external_postgresql_ssl_reject_unauthorized: false
+
+# =============================================================================
+# SCENARIO F: S3-compatible object storage (optional, TechDocs)
+# =============================================================================
+# Configures TechDocs to publish/read from S3-compatible storage (AWS S3, MinIO,
+# OpenShift Data Foundation ObjectBucketClaim, etc.).
+#
+# s3_storage_enabled: true
+# s3_bucket_name: my-techdocs-bucket
+# s3_region: us-east-1
+# s3_endpoint: https://s3.amazonaws.com
+# s3_access_key_id: CHANGE_ME
+# s3_secret_access_key: CHANGE_ME
+# s3_force_path_style: true
+#
+# Or reference an existing ObjectBucketClaim secret/configmap:
+# s3_storage_enabled: true
+# s3_use_existing_secret: true
+# s3_existing_secret_name: obc-secret-name
+# s3_existing_configmap_name: obc-configmap-name
+
+# =============================================================================
+# OPTIONAL: AAP and Helm tuning
+# =============================================================================
+# aap_verify_ssl: false
+# aap_oauth_client_name: "Self Service"
+# aap_organization: Default
+# ensure_aap_organization: true
+# helm_release_name: self-service
+# helm_chart_version: "2.1.6"   # optional; auto-detected from plugin .tgz version by default
+# auto_helm_chart_version: true  # set false to require an explicit helm_chart_version
+# helm_deploy_wait_timeout: 1200 # portal init can take 10+ minutes on first deploy
+# plugin_build_timeout: "20m"

@@ -1,5 +1,21 @@
 #SPDX-License-Identifier: MIT-0
 ---
+- name: Validate required variables
+  ansible.builtin.import_tasks: validate.yml
+  tags: [validate, preflight, build_plugin, helm, deploy_plugin]
+
+- name: Normalize AAP connection variables
+  ansible.builtin.import_tasks: prep.yml
+  tags: [prep, preflight, build_plugin, helm, deploy_plugin]
+
+- name: Run preflight checks
+  ansible.builtin.import_tasks: preflight.yml
+  tags: [preflight, build_plugin, helm, deploy_plugin]
+
+- name: Configure AAP platform settings
+  ansible.builtin.import_tasks: aap_setup.yml
+  tags: [aap_setup, create_oauth]
+
 - name: Create OAuth2 application in AAP
   import_tasks: oauth.yml
   tags: [create_oauth]
@@ -11,6 +27,11 @@
 - name: Create OpenShift namespace
   import_tasks: namespace.yml
   tags: [create_namespace]
+
+- name: Download plugins from RHSM
+  ansible.builtin.import_tasks: download_plugins.yml
+  when: download_plugins | default(false)
+  tags: [download_plugins, build_plugin]
 
 - name: Create OpenShift secrets
   import_tasks: oc_secrets.yml

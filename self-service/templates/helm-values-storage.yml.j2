@@ -1,0 +1,68 @@
+# {{ ansible_managed }}
+# Rendered overlay for optional external PostgreSQL and S3 storage.
+{% set _extra_env_secrets = [] %}
+{% set _extra_env_configmaps = [] %}
+{% if external_postgresql_enabled | bool %}
+{%   set _ = _extra_env_secrets.append(external_postgresql_secret_name) %}
+{% endif %}
+{% if s3_storage_enabled | bool %}
+{%   if s3_use_existing_secret | bool %}
+{%     set _ = _extra_env_secrets.append(s3_existing_secret_name) %}
+{%     if s3_existing_configmap_name | default('') != '' %}
+{%       set _ = _extra_env_configmaps.append(s3_existing_configmap_name) %}
+{%     endif %}
+{%   else %}
+{%     set _ = _extra_env_secrets.append(s3_secret_name) %}
+{%   endif %}
+{% endif %}
+redhat-developer-hub:
+  upstream:
+{% if external_postgresql_enabled | bool %}
+    postgresql:
+      enabled: false
+      auth:
+        existingSecret: {{ external_postgresql_secret_name }}
+        secretKeys:
+          adminPasswordKey: POSTGRES_PASSWORD
+{% endif %}
+    backstage:
+{% if _extra_env_secrets | length > 0 %}
+      extraEnvVarsSecrets:
+{{ _extra_env_secrets | to_nice_yaml(indent=2) | indent(8, first=True) }}
+{% endif %}
+{% if _extra_env_configmaps | length > 0 %}
+      extraEnvVarsCM:
+{{ _extra_env_configmaps | to_nice_yaml(indent=2) | indent(8, first=True) }}
+{% endif %}
+      appConfig:
+{% if external_postgresql_enabled | bool %}
+        backend:
+          database:
+            client: pg
+            connection:
+              host: ${POSTGRES_HOST}
+              port: ${POSTGRES_PORT}
+              user: ${POSTGRES_USER}
+              password: ${POSTGRES_PASSWORD}
+              database: ${POSTGRES_DB}
+{% if external_postgresql_ssl_enabled | bool %}
+              ssl:
+                rejectUnauthorized: {{ external_postgresql_ssl_reject_unauthorized | bool | lower }}
+{% endif %}
+{% endif %}
+{% if s3_storage_enabled | bool %}
+        techdocs:
+          builder: external
+          generator:
+            runIn: local
+          publisher:
+            type: awsS3
+            awsS3:
+              bucketName: ${BUCKET_NAME}
+              region: ${BUCKET_REGION}
+              endpoint: https://${BUCKET_HOST}
+              s3ForcePathStyle: {{ s3_force_path_style | bool | lower }}
+              credentials:
+                accessKeyId: ${AWS_ACCESS_KEY_ID}
+                secretAccessKey: ${AWS_SECRET_ACCESS_KEY}
+{% endif %}

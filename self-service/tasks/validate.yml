@@ -1,0 +1,60 @@
+---
+- name: Fail if aap_host is not set
+  ansible.builtin.fail:
+    msg: "aap_host must be set (AAP controller route hostname or URL)"
+  when: aap_host == "" or aap_host is not defined
+
+- name: Fail if aap_password is not set
+  ansible.builtin.fail:
+    msg: "aap_password must be set"
+  when: aap_password == "" or aap_password is not defined
+
+- name: Fail if rhsm_offline_token is not set when download_plugins is true
+  ansible.builtin.fail:
+    msg: "rhsm_offline_token must be set when download_plugins is true"
+  when:
+    - download_plugins | default(false)
+    - rhsm_offline_token | default('') == ''
+
+- name: Fail if openshift_namespace is not set
+  ansible.builtin.fail:
+    msg: "openshift_namespace must be set to the target OpenShift project name"
+  when: openshift_namespace | default('') == ''
+
+- name: Fail when external PostgreSQL is enabled but required fields are missing
+  ansible.builtin.fail:
+    msg: >-
+      external_postgresql_host, external_postgresql_user, external_postgresql_password,
+      and external_postgresql_database must be set when external_postgresql_enabled is true
+  when:
+    - external_postgresql_enabled | bool
+    - external_postgresql_host | default('') == ''
+      or external_postgresql_user | default('') == ''
+      or external_postgresql_password | default('') == ''
+      or external_postgresql_database | default('') == ''
+
+- name: Fail when S3 storage is enabled but required fields are missing
+  ansible.builtin.fail:
+    msg: >-
+      When s3_storage_enabled is true with s3_use_existing_secret, set s3_existing_secret_name.
+      Otherwise set s3_bucket_name, s3_region, s3_endpoint, s3_access_key_id, and s3_secret_access_key.
+  when:
+    - s3_storage_enabled | bool
+    - s3_use_existing_secret | bool
+    - s3_existing_secret_name | default('') == ''
+  tags: [validate]
+
+- name: Fail when S3 credentials are incomplete
+  ansible.builtin.fail:
+    msg: >-
+      s3_bucket_name, s3_region, s3_endpoint, s3_access_key_id, and s3_secret_access_key
+      are required when s3_storage_enabled is true and s3_use_existing_secret is false
+  when:
+    - s3_storage_enabled | bool
+    - not (s3_use_existing_secret | bool)
+    - s3_bucket_name | default('') == ''
+      or s3_region | default('') == ''
+      or s3_endpoint | default('') == ''
+      or s3_access_key_id | default('') == ''
+      or s3_secret_access_key | default('') == ''
+  tags: [validate]

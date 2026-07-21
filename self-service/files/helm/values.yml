@@ -51,7 +51,7 @@ redhat-developer-hub:
         - disabled: false
           package: >-
             ./dynamic-plugins/dist/backstage-plugin-scaffolder-backend-module-gitlab-dynamic
-    imageTagInfo: main
+    imageTagInfo: "2.1"
   nameOverride: rhaap-portal
   test:
     enabled: false
@@ -64,7 +64,7 @@ redhat-developer-hub:
             port: '8000'
           rhaap:
             baseUrl: '${AAP_HOST_URL}'
-            checkSSL: true
+            checkSSL: false
             token: '${AAP_TOKEN}'
         app:
           branding:
@@ -79,7 +79,7 @@ redhat-developer-hub:
           providers:
             rhaap:
               production:
-                checkSSL: true
+                checkSSL: false
                 clientId: '${OAUTH_CLIENT_ID}'
                 clientSecret: '${OAUTH_CLIENT_SECRET}'
                 host: '${AAP_HOST_URL}'
@@ -328,5 +328,5 @@ redhat-developer-hub:
       image:
         registry: registry.redhat.io
         repository: rhdh/rhdh-hub-rhel9
-        tag: 1.6.3
+        tag: "1.9"
     nameOverride: rhaap-portal

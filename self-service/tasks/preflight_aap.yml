@@ -1,0 +1,23 @@
+---
+- name: Verify AAP controller API is reachable
+  ansible.builtin.uri:
+    url: "{{ aap_host_url }}/api/v2/ping/"
+    method: GET
+    validate_certs: "{{ aap_verify_ssl }}"
+    status_code: [200, 301, 302, 401, 403]
+    return_content: false
+  register: preflight_aap_ping
+  failed_when: false
+  tags: [preflight]
+
+- name: Fail when AAP controller is unreachable
+  ansible.builtin.fail:
+    msg: |
+      Could not reach the AAP controller at {{ aap_host_url }}.
+
+      Verify aap_host in your vars file and that the controller is running:
+        curl -k {{ aap_host_url }}/api/v2/ping/
+
+      Check aap_verify_ssl if you are using self-signed certificates.
+  when: preflight_aap_ping.status is not defined or preflight_aap_ping.status == -1
+  tags: [preflight]

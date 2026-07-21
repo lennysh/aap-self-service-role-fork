@@ -1,0 +1,13 @@
+---
+- name: Normalize AAP controller hostname for API modules
+  ansible.builtin.set_fact:
+    aap_hostname: "{{ aap_host | regex_replace('^https?://', '') | regex_replace('/.*$', '') }}"
+
+- name: Normalize AAP controller URL for portal secrets
+  ansible.builtin.set_fact:
+    aap_host_url: >-
+      {%- if aap_host is match('^https?://') -%}
+      {{ aap_host | regex_replace('/$', '') }}
+      {%- else -%}
+      https://{{ aap_host | regex_replace('/$', '') }}
+      {%- endif -%}

@@ -1,0 +1,68 @@
+---
+- name: Check oc client is available
+  ansible.builtin.command: oc version --client
+  register: preflight_oc_version
+  changed_when: false
+  failed_when: false
+  tags: [preflight]
+
+- name: Fail when oc client is missing
+  ansible.builtin.fail:
+    msg: |
+      The OpenShift CLI (oc) was not found on PATH.
+
+      Install oc and log in before running this role:
+        oc login --token=<token> --server=https://api.<cluster>:6443
+
+      The plugin-registry build uses: oc start-build plugin-registry --from-dir=...
+  when: preflight_oc_version.rc != 0
+  tags: [preflight]
+
+- name: Check helm client is available
+  ansible.builtin.command: helm version --short
+  register: preflight_helm_version
+  changed_when: false
+  failed_when: false
+  tags: [preflight]
+
+- name: Fail when helm client is missing
+  ansible.builtin.fail:
+    msg: |
+      Helm was not found on PATH.
+
+      Install Helm 3.10+ before running this role, for example:
+        sudo dnf install helm
+
+      Helm is required to install the redhat-rhaap-portal chart.
+  when: preflight_helm_version.rc != 0
+  tags: [preflight]
+
+- name: Parse helm version
+  ansible.builtin.set_fact:
+    preflight_helm_version_number: "{{ preflight_helm_version.stdout | default('') | trim | regex_replace('^v', '') | regex_replace('\\+.*', '') }}"
+  when: preflight_helm_version.rc == 0
+  tags: [preflight]
+
+- name: Fail when helm version cannot be parsed
+  ansible.builtin.fail:
+    msg: |
+      Helm is installed but its version could not be parsed.
+
+      Output: {{ preflight_helm_version.stdout | default('') }}
+
+      Expected format like v3.19.0 or v3.19.0+g3d8990f
+  when:
+    - preflight_helm_version.rc == 0
+    - preflight_helm_version_number | default('') == ''
+  tags: [preflight]
+
+- name: Fail when helm version is too old
+  ansible.builtin.fail:
+    msg: |
+      Helm {{ preflight_helm_version_number }} was found but version {{ helm_min_version }} or newer is required.
+
+      Output: {{ preflight_helm_version.stdout | default('') }}
+  when:
+    - preflight_helm_version.rc == 0
+    - preflight_helm_version_number is version(helm_min_version, '<')
+  tags: [preflight]

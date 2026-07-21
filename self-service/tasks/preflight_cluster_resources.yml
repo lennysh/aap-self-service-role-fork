@@ -1,0 +1,44 @@
+---
+- name: Get OpenShift worker node status
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Node
+  register: preflight_nodes
+  tags: [preflight, helm, build_plugin]
+
+- name: Identify nodes reporting disk pressure
+  ansible.builtin.set_fact:
+    preflight_disk_pressure_nodes: >-
+      {{
+        preflight_nodes.resources
+        | default([])
+        | json_query("[?status.conditions[?type=='DiskPressure' && status=='True']].metadata.name")
+      }}
+  tags: [preflight, helm, build_plugin]
+
+- name: Warn when cluster nodes report disk pressure
+  ansible.builtin.debug:
+    msg: |
+      WARNING: OpenShift node(s) report DiskPressure: {{ preflight_disk_pressure_nodes | join(', ') }}.
+
+      Portal pods pull large container images (~3.4 GB) and create 5Gi dynamic-plugin PVCs.
+      Deployments may hang in Pending, pods may be evicted, or Helm wait may time out.
+
+      Ask a cluster admin to free ephemeral storage on affected nodes, then re-run:
+        oc describe node {{ preflight_disk_pressure_nodes | first }}
+        oc adm top nodes
+  when: preflight_disk_pressure_nodes | default([]) | length > 0
+  tags: [preflight, helm, build_plugin]
+
+- name: Fail when all schedulable nodes have disk pressure
+  ansible.builtin.fail:
+    msg: |
+      All OpenShift worker nodes report DiskPressure: {{ preflight_disk_pressure_nodes | join(', ') }}.
+
+      The portal cannot schedule until nodes have free ephemeral storage.
+      Free disk space on workers (container images, logs, unused PVCs) and retry.
+  when:
+    - preflight_fail_on_disk_pressure | default(false) | bool
+    - preflight_disk_pressure_nodes | default([]) | length > 0
+    - preflight_nodes.resources | default([]) | length == preflight_disk_pressure_nodes | length
+  tags: [preflight, helm, build_plugin]

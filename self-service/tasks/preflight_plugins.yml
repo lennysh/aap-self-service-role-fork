@@ -1,0 +1,25 @@
+---
+- name: Stat plugin root directory
+  ansible.builtin.stat:
+    path: "{{ plugin_root_dir }}"
+  register: preflight_plugin_root_dir
+  when: not (download_plugins | default(false))
+  tags: [preflight]
+
+- name: Fail when plugin directory is missing
+  ansible.builtin.fail:
+    msg: |
+      Plugin directory {{ plugin_root_dir }} does not exist.
+
+      Extract the setup bundle manually:
+        mkdir -p {{ plugin_root_dir }}
+        tar --exclude='*code*' -xzf plugins/aap26/self-service-automation-portal-plugins-*.tar.gz -C {{ plugin_root_dir }}
+
+      Or enable automatic download:
+        download_plugins: true
+        rhsm_offline_token: <token>
+  when:
+    - not (download_plugins | default(false))
+    - not preflight_plugin_root_dir.stat.exists | default(false)
+      or not preflight_plugin_root_dir.stat.isdir | default(false)
+  tags: [preflight]

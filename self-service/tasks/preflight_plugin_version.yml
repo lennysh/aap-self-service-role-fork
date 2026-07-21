@@ -1,0 +1,94 @@
+---
+- name: Find self-service plugin tarball in plugin directory
+  ansible.builtin.find:
+    paths: "{{ plugin_root_dir }}"
+    patterns: ansible-plugin-backstage-self-service-dynamic-*.tgz
+    file_type: file
+  register: preflight_plugin_tarballs
+  when: not (download_plugins | default(false))
+  tags: [preflight, helm]
+
+- name: Fail when no plugin tarballs are found
+  ansible.builtin.fail:
+    msg: |
+      No plugin tarballs found in {{ plugin_root_dir }}.
+
+      Expected files like ansible-plugin-backstage-self-service-dynamic-2.1.4.tgz
+
+      Extract the setup bundle:
+        mkdir -p {{ plugin_root_dir }}
+        tar --exclude='*code*' -xzf plugins/aap26/self-service-automation-portal-plugins-*.tar.gz -C {{ plugin_root_dir }}
+  when:
+    - not (download_plugins | default(false))
+    - preflight_plugin_tarballs.matched | default(0) == 0
+  tags: [preflight, helm]
+
+- name: Detect plugin bundle version from tarball filename
+  ansible.builtin.set_fact:
+    detected_plugin_version: >-
+      {{
+        (preflight_plugin_tarballs.files[0].path | basename).split('-') | last
+        | regex_replace('\.tgz$', '')
+      }}
+  when:
+    - not (download_plugins | default(false))
+    - preflight_plugin_tarballs.matched | default(0) > 0
+  tags: [preflight, helm]
+
+- name: Resolve expected Helm chart version for detected plugins
+  ansible.builtin.set_fact:
+    _expected_helm_chart_version: "{{ helm_plugin_version_map[detected_plugin_version] | default('') }}"
+  when: detected_plugin_version | default('') != ''
+  tags: [preflight, helm]
+
+- name: Auto-set Helm chart version from detected plugin bundle
+  ansible.builtin.set_fact:
+    helm_chart_version: "{{ _expected_helm_chart_version }}"
+  when:
+    - auto_helm_chart_version | default(true) | bool
+    - detected_plugin_version | default('') != ''
+    - _expected_helm_chart_version | default('') != ''
+  tags: [preflight, helm]
+
+- name: Display detected plugin and Helm chart versions
+  ansible.builtin.debug:
+    msg: >-
+      Detected plugin bundle {{ detected_plugin_version }}.
+      Using Helm chart version {{ helm_chart_version }}.
+  when: detected_plugin_version | default('') != ''
+  tags: [preflight, helm]
+
+- name: Fail when plugin bundle version is unknown
+  ansible.builtin.fail:
+    msg: |
+      Plugin bundle version {{ detected_plugin_version }} is not mapped to a Helm chart version.
+
+      Add a mapping in helm_plugin_version_map or set helm_chart_version explicitly in your vars file.
+
+      Known mappings:
+      {% for plugin_ver, chart_ver in helm_plugin_version_map.items() %}
+        plugin {{ plugin_ver }} -> chart {{ chart_ver }}
+      {% endfor %}
+  when:
+    - detected_plugin_version | default('') != ''
+    - _expected_helm_chart_version | default('') == ''
+  tags: [preflight, helm]
+
+- name: Fail when Helm chart version does not match plugin bundle
+  ansible.builtin.fail:
+    msg: |
+      Helm chart version mismatch.
+
+      Extracted plugins are version {{ detected_plugin_version }}, which requires chart {{ _expected_helm_chart_version }}.
+      Your vars file sets helm_chart_version={{ helm_chart_version }}.
+
+      Fix by either:
+        1. Remove helm_chart_version from your vars file (auto-detection is enabled by default), or
+        2. Set helm_chart_version: "{{ _expected_helm_chart_version }}"
+        3. Extract the plugin bundle version that matches chart {{ helm_chart_version }}
+  when:
+    - not (auto_helm_chart_version | default(true) | bool)
+    - detected_plugin_version | default('') != ''
+    - _expected_helm_chart_version | default('') != ''
+    - helm_chart_version != _expected_helm_chart_version
+  tags: [preflight, helm]

@@ -1,0 +1,21 @@
+---
+- name: Preflight | required CLI tools
+  ansible.builtin.import_tasks: preflight_tools.yml
+
+- name: Preflight | OpenShift API connectivity
+  ansible.builtin.import_tasks: preflight_openshift_connection.yml
+
+- name: Preflight | AAP controller connectivity
+  ansible.builtin.import_tasks: preflight_aap.yml
+
+- name: Preflight | plugin source directory
+  ansible.builtin.import_tasks: preflight_plugins.yml
+
+- name: Preflight | plugin and Helm chart version alignment
+  ansible.builtin.import_tasks: preflight_plugin_version.yml
+
+- name: Preflight | OpenShift cluster resources
+  ansible.builtin.import_tasks: preflight_cluster_resources.yml
+
+- name: Preflight | OpenShift registry and builder image
+  ansible.builtin.import_tasks: preflight_openshift.yml

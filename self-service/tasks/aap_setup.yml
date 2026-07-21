@@ -1,0 +1,37 @@
+---
+- name: Normalize AAP connection variables
+  ansible.builtin.import_tasks: prep.yml
+  when: aap_hostname is not defined
+
+- name: Ensure AAP organization exists
+  when: ensure_aap_organization | default(true)
+  ansible.platform.organization:
+    name: "{{ aap_organization }}"
+    state: present
+    aap_hostname: "{{ aap_hostname }}"
+    aap_username: "{{ aap_username }}"
+    aap_password: "{{ aap_password }}"
+    aap_validate_certs: "{{ aap_verify_ssl }}"
+  tags: [aap_setup, create_oauth]
+
+- name: Allow external users to create OAuth2 tokens
+  ansible.platform.settings:
+    settings:
+      ALLOW_OAUTH2_FOR_EXTERNAL_USERS: true
+    aap_hostname: "{{ aap_hostname }}"
+    aap_username: "{{ aap_username }}"
+    aap_password: "{{ aap_password }}"
+    aap_validate_certs: "{{ aap_verify_ssl }}"
+  tags: [aap_setup, create_oauth]
+
+- name: Delete existing OAuth2 application before recreate
+  when: recreate_oauth_app | default(false)
+  ansible.platform.application:
+    name: "{{ aap_oauth_client_name }}"
+    organization: "{{ aap_organization }}"
+    state: absent
+    aap_hostname: "{{ aap_hostname }}"
+    aap_username: "{{ aap_username }}"
+    aap_password: "{{ aap_password }}"
+    aap_validate_certs: "{{ aap_verify_ssl }}"
+  tags: [aap_setup, create_oauth]
