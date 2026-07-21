@@ -1,5 +1,5 @@
+---
 collections:
   - name: ansible.platform
   - name: redhat.openshift
   - name: kubernetes.core
-

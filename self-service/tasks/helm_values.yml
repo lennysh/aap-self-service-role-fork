@@ -59,6 +59,7 @@
   tags: helm
 
 - name: Wait for portal Helm deployment to be ready
+  tags: helm
   block:
     - name: Wait for portal Deployment to become available
       kubernetes.core.k8s_info:
@@ -97,4 +98,3 @@
 
           Helm may have upgraded successfully; re-run with --tags helm once issues are resolved,
           or increase helm_deploy_wait_timeout in your vars file.
-  tags: helm
